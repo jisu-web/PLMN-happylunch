@@ -70,7 +70,15 @@ const DEF_CATS = [
 ];
 
 const DEF_RESTS = [
-  { id: 1, cat: "c4", sub: "기타", name: "쮸즈", mapUrl: "", reviews: [] },
+  {
+    id: 1,
+    cat: "c4",
+    sub: "기타",
+    name: "쮸즈",
+    mapUrl: "",
+    reviews: [],
+    createdAt: Date.now(),
+  },
 ];
 
 /* ─── 컬러 토큰 & 아이콘 등 ─── */
@@ -225,7 +233,7 @@ const IcGear = () => (
     strokeWidth="1.8"
   >
     <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </svg>
 );
 
@@ -1004,6 +1012,7 @@ export default function App() {
   const [rests, setRests] = useState([]);
   const [trashRests, setTrashRests] = useState([]);
 
+  // 🔥 더 엄격한 필터링: === true 와 !== true 를 명확히 구분
   useEffect(() => {
     const unsubCats = onSnapshot(collection(db, "cats_data"), (snap) => {
       let data = snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
@@ -1079,11 +1088,20 @@ export default function App() {
       return true;
     }) || []
   ).sort((a, b) => {
+    // 🔥 시간순(createdAt) 정렬 로직 보강
     if (sortConfig.key === "newest") {
-      const cmp = String(a.id).localeCompare(String(b.id), undefined, {
+      // createdAt 정보가 없는 옛날 데이터는 0으로 처리하여 뒤로 보냄
+      const timeA = a.createdAt || 0;
+      const timeB = b.createdAt || 0;
+
+      if (timeA !== timeB) {
+        return sortConfig.dir === "desc" ? timeB - timeA : timeA - timeB;
+      }
+      // 시간이 같거나 없는 경우 ID 문자열로 2차 정렬 (에러 방지)
+      const cmpId = String(a.id).localeCompare(String(b.id), undefined, {
         numeric: true,
       });
-      return sortConfig.dir === "desc" ? -cmp : cmp;
+      return sortConfig.dir === "desc" ? -cmpId : cmpId;
     }
     if (sortConfig.key === "name") {
       const cmp = a.name.localeCompare(b.name);
@@ -1144,7 +1162,12 @@ export default function App() {
     if (!rForm.name.trim()) return;
     // 🔥 카테고리 '선택 안함(빈값)'일 경우 자동으로 '기타' 할당
     const finalSub = rForm.sub === "" ? "기타" : rForm.sub;
-    const finalForm = { ...rForm, sub: finalSub };
+    const finalForm = {
+      ...rForm,
+      sub: finalSub,
+      // 🔥 맛집 저장 시 현재 시간을 생성 시간으로 기록
+      createdAt: md?.createdAt || Date.now(),
+    };
 
     if (md?.id) {
       await updateDoc(doc(db, "rests_data", String(md.id)), finalForm);
@@ -1923,7 +1946,7 @@ export default function App() {
                       color: C.gray,
                     }}
                   >
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>🍽️</div>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}></div>
                     <div style={{ fontSize: 13 }}>등록된 맛집이 없어요</div>
                   </div>
                 )}
