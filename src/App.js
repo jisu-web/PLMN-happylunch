@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore,
   collection,
@@ -21,7 +21,7 @@ const firebaseConfig = {
   appId: "1:880105236909:web:4224bc57d5d454ffb79924",
 };
 
-const app = initializeApp(firebaseConfig);
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 
 /* ─── 기본 데이터 (이모지 및 초기 맛집 세팅) ─── */
@@ -220,6 +220,24 @@ const IcChev = ({ open }) => (
     }}
   >
     <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
+// 🔥 검색창용 돋보기 아이콘
+const IcSearch = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ flexShrink: 0, display: "block" }}
+  >
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
 
@@ -1084,6 +1102,10 @@ export default function App() {
   // 🔥 정렬 토글 상태 유지
   const [sortConfig, setSortConfig] = useState({ key: "newest", dir: "desc" });
 
+  // 🔥 맛집 검색창용 상태
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false); // 🔥 돋보기 토글 상태 추가
+
   const catOf = (id) =>
     cats?.find((c) => c.id === id) || trashCats?.find((c) => c.id === id);
 
@@ -1092,6 +1114,13 @@ export default function App() {
       if (selCat === "trash") return false;
       if (selCat !== "all" && r.cat !== selCat) return false;
       if (selSub !== "all" && r.sub !== selSub) return false;
+
+      // 🔥 검색어 필터링 로직 추가
+      if (searchQuery.trim() !== "") {
+        if (!r.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) {
+          return false;
+        }
+      }
       return true;
     }) || []
   ).sort((a, b) => {
@@ -1124,14 +1153,17 @@ export default function App() {
     if (type === "cat") {
       cats.forEach((c) => {
         if (c.sub && c.sub.length > 0) {
-          c.sub.forEach((s) =>
-            pool.push({
-              type: "sub",
-              name: s,
-              parentName: c.name,
-              emoji: c.emoji,
-            })
-          );
+          c.sub.forEach((s) => {
+            // 🔥 하위 카테고리 이름이 '기타'가 아닐 때만 뽑기 통에 넣습니다!
+            if (s !== "기타") {
+              pool.push({
+                type: "sub",
+                name: s,
+                parentName: c.name,
+                emoji: c.emoji,
+              });
+            }
+          });
         } else {
           pool.push({
             type: "main",
@@ -1377,7 +1409,7 @@ export default function App() {
                   opacity: spinning ? 0.7 : 1,
                 }}
               >
-                카테고리 골라줘
+                메뉴 골라줘
               </button>
             </div>
 
@@ -1538,6 +1570,8 @@ export default function App() {
                 setSelCat("all");
                 setSelSub("all");
                 setSelId(null);
+                setSearchQuery("");
+                setIsSearchOpen(false); // 🔥 카테고리 이동 시 돋보기창 닫힘!
               }}
               style={{
                 display: "flex",
@@ -1584,8 +1618,14 @@ export default function App() {
                   setSelCat(id);
                   setSelSub("all");
                   setSelId(null);
+                  setSearchQuery("");
+                  setIsSearchOpen(false); // 🔥 카테고리 이동 시 돋보기창 닫힘!
                 }}
-                onSub={setSelSub}
+                onSub={(sub) => {
+                  setSelSub(sub);
+                  setSearchQuery("");
+                  setIsSearchOpen(false); // 🔥 하위 카테고리 이동 시 돋보기창 닫힘!
+                }}
               />
             ))}
 
@@ -1601,6 +1641,8 @@ export default function App() {
                   setSelCat("trash");
                   setSelSub("all");
                   setSelId(null);
+                  setSearchQuery("");
+                  setIsSearchOpen(false); // 🔥 휴지통 이동 시 돋보기창 닫힘!
                 }}
                 style={{
                   display: "flex",
@@ -1652,19 +1694,93 @@ export default function App() {
               flexShrink: 0,
             }}
           >
-            <span style={{ fontWeight: 300, fontSize: 14, color: C.ink }}>
-              {listTitle}
-            </span>
+            {/* 🔥 왼쪽: 타이틀 영역 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontWeight: 300, fontSize: 14, color: C.ink }}>
+                {listTitle}
+              </span>
+            </div>
+
+            {/* 🔥 오른쪽: 검색창 + 정렬 버튼 + 추가 버튼 모음 */}
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {selCat !== "trash" ? (
                 <>
+                  {/* 🔥 1. 돋보기 토글 검색창 */}
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      background: C.card,
-                      border: `1.5px solid ${C.border}`,
-                      borderRadius: R,
+                      background: isSearchOpen ? C.bg : "transparent",
+                      borderRadius: R - 4,
+                      padding: isSearchOpen ? "0 10px" : "0 4px",
+                      height: 32,
+                      transition: "background 0.2s",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        if (isSearchOpen) {
+                          setIsSearchOpen(false);
+                          setSearchQuery(""); // 닫을 때 검색어 초기화
+                        } else {
+                          setIsSearchOpen(true);
+                        }
+                      }}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        cursor: "pointer",
+                        color: isSearchOpen ? C.ink : C.muted,
+                        display: "flex",
+                        padding: 0,
+                        marginRight: isSearchOpen ? 6 : 0,
+                        transition: "color 0.2s",
+                      }}
+                    >
+                      <IcSearch />
+                    </button>
+
+                    {isSearchOpen && (
+                      <>
+                        <input
+                          autoFocus
+                          placeholder="맛집 검색..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          style={{
+                            border: "none",
+                            outline: "none",
+                            background: "transparent",
+                            fontSize: 13,
+                            width: 110,
+                            color: C.ink,
+                            fontFamily: "inherit",
+                          }}
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => setSearchQuery("")}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              cursor: "pointer",
+                              color: C.gray,
+                              display: "flex",
+                              padding: 0,
+                            }}
+                          >
+                            <IcX />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* 🔥 2. 정렬 버튼 (테두리 제거 버전) */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
                       height: 36,
                       padding: "0 4px",
                     }}
@@ -1736,12 +1852,17 @@ export default function App() {
                         (sortConfig.dir === "asc" ? "↓" : "↑")}
                     </button>
                   </div>
+
+                  {/* 🔥 3. 맛집 추가 버튼 */}
                   <button
                     onClick={() => {
                       setRForm({
                         name: "",
-                        cat: cats[0]?.id || "",
-                        sub: "" /* 🔥 기본 하위카테고리 초기화 적용 */,
+                        cat:
+                          selCat !== "all" && selCat !== "trash"
+                            ? selCat
+                            : cats[0]?.id || "",
+                        sub: "",
                         mapUrl: "",
                       });
                       setModal("addRest");
