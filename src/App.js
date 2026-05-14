@@ -124,6 +124,46 @@ function Stars({ value, onRate, size = 13 }) {
   );
 }
 
+// 🔥 새 리뷰인지 확인하는 함수 (최근 3일 이내 AND 내가 아직 안 읽음)
+function hasNewReview(restId, reviews, history) {
+  if (!reviews?.length) return false;
+
+  // 해당 맛집의 가장 최신 리뷰 ID(작성시간)
+  const latestRev = Math.max(...reviews.map((r) => r.id || 0));
+  // 내가 마지막으로 본 리뷰 시간 (기록이 없으면 0)
+  const lastSeen = history[restId] || 0;
+
+  // 조건 1: 3일(72시간) 이내에 작성되었는가?
+  const isRecent = Date.now() - latestRev < 3 * 24 * 60 * 60 * 1000;
+  // 조건 2: 내가 마지막으로 본 시간보다 나중에 작성되었는가?
+  const isUnread = latestRev > lastSeen;
+
+  // 두 조건을 모두 만족할 때만 N 뱃지 띄우기!
+  return isRecent && isUnread;
+}
+
+// 🔥 N 뱃지 아이콘 컴포넌트
+const BadgeNew = () => (
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: C.point,
+      color: C.ink,
+      fontSize: 9,
+      fontWeight: 800,
+      width: 14,
+      height: 14,
+      borderRadius: "50%",
+      marginLeft: 6,
+      flexShrink: 0,
+    }}
+  >
+    N
+  </span>
+);
+
 function avgRating(reviews) {
   if (!reviews?.length) return null;
   return (
@@ -1148,6 +1188,25 @@ export default function App() {
 
   const selected = selId ? rests?.find((r) => r.id === selId) : null;
 
+  // 🔥 내가 확인한 리뷰 기록 불러오기 (로컬 스토리지)
+  const [readHistory, setReadHistory] = useState(() => {
+    const saved = localStorage.getItem("readReviews");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // 🔥 맛집을 클릭해서 상세 정보를 볼 때마다, 가장 최신 리뷰를 '읽음' 처리함
+  useEffect(() => {
+    if (selected && selected.reviews?.length > 0) {
+      const latestRev = Math.max(...selected.reviews.map((r) => r.id || 0));
+      setReadHistory((prev) => {
+        if (prev[selected.id] === latestRev) return prev; // 이미 최신이면 패스
+        const next = { ...prev, [selected.id]: latestRev };
+        localStorage.setItem("readReviews", JSON.stringify(next)); // 브라우저에 저장
+        return next;
+      });
+    }
+  }, [selected]);
+
   const doRandom = (type) => {
     let pool = [];
     if (type === "cat") {
@@ -2119,6 +2178,8 @@ export default function App() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div
                             style={{
+                              display: "flex",
+                              alignItems: "center",
                               fontWeight: 600,
                               fontSize: 14,
                               color: C.ink,
@@ -2129,6 +2190,9 @@ export default function App() {
                             }}
                           >
                             {r.name}
+                            {hasNewReview(r.id, r.reviews, readHistory) && (
+                              <BadgeNew />
+                            )}
                           </div>
                           <div
                             style={{
